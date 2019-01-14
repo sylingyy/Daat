@@ -184,9 +184,6 @@ __vmx_entry(
     SEGMENT_DESCRIPTOR SegmentDescriptor = { 0 };
     PCCB CurrentBlock = NULL;
 
-    CaptureControlRegisters(Registers);
-    CaptureSegmentRegisters(Registers);
-
     CurrentBlock = CONTAINING_RECORD(Registers, CCB, Registers);
 
     ReadCpuFeature(&CurrentBlock->Feature);
@@ -221,6 +218,8 @@ __vmx_entry(
     CurrentBlock->Vmcs = MmGetPhysicalAddress(&CurrentBlock->Region.Vmcs);
     CurrentBlock->Bitmap = MmGetPhysicalAddress(&CurrentBlock->Region.Bitmap);
 
+    Registers->Cr0 = __ops_readcr(0);
+
     CurrentBlock->VmxInfo.Cr0.LowPart = CurrentBlock->Registers.Cr0;
 
     CurrentBlock->VmxInfo.Cr0Fixed.LowPart = __ops_readmsr(IA32_VMX_CR0_FIXED0);
@@ -230,22 +229,24 @@ __vmx_entry(
     CurrentBlock->VmxInfo.Cr0.LowPart |= CurrentBlock->VmxInfo.Cr0Fixed.LowPart;
 
     DbgPrint(
-        "[Sefirot] [Daat] cr0 < %p >\n",
+        "[Sefirot] [Daat] cr0 < %016x >\n",
         CurrentBlock->VmxInfo.Cr0.QuadPart);
 
-    __ops_writecr0(CurrentBlock->VmxInfo.Cr0.QuadPart);
+    __ops_writecr(0, CurrentBlock->VmxInfo.Cr0.QuadPart);
 
     CurrentBlock->VmxInfo.Cr0ReadShadow.LowPart = CurrentBlock->Registers.Cr0;
 
     DbgPrint(
-        "[Sefirot] [Daat] cr0 read shadow < %p >\n",
+        "[Sefirot] [Daat] cr0 read shadow < %016x >\n",
         CurrentBlock->VmxInfo.Cr0ReadShadow.QuadPart);
 
     CurrentBlock->VmxInfo.Cr0Mask.LowPart = CR0_PE | CR0_NE | CR0_PG;
 
     DbgPrint(
-        "[Sefirot] [Daat] cr0 mask < %p >\n",
+        "[Sefirot] [Daat] cr0 mask < %016x >\n",
         CurrentBlock->VmxInfo.Cr0Mask.QuadPart);
+
+    Registers->Cr4 = __ops_readcr(4);
 
     CurrentBlock->VmxInfo.Cr4.LowPart = CurrentBlock->Registers.Cr4;
 
@@ -256,21 +257,21 @@ __vmx_entry(
     CurrentBlock->VmxInfo.Cr4.LowPart |= CurrentBlock->VmxInfo.Cr4Fixed.LowPart;
 
     DbgPrint(
-        "[Sefirot] [Daat] cr4 < %p >\n",
+        "[Sefirot] [Daat] cr4 < %016x >\n",
         CurrentBlock->VmxInfo.Cr4.QuadPart);
 
-    __ops_writecr4(CurrentBlock->VmxInfo.Cr4.QuadPart);
+    __ops_writecr(4, CurrentBlock->VmxInfo.Cr4.QuadPart);
 
     CurrentBlock->VmxInfo.Cr4ReadShadow.LowPart = CurrentBlock->Registers.Cr4;
 
     DbgPrint(
-        "[Sefirot] [Daat] cr4 read shadow < %p >\n",
+        "[Sefirot] [Daat] cr4 read shadow < %016x >\n",
         CurrentBlock->VmxInfo.Cr4ReadShadow.QuadPart);
 
     CurrentBlock->VmxInfo.Cr4Mask.LowPart = CR4_VMXE;
 
     DbgPrint(
-        "[Sefirot] [Daat] cr4 mask < %p >\n",
+        "[Sefirot] [Daat] cr4 mask < %016x >\n",
         CurrentBlock->VmxInfo.Cr4Mask.QuadPart);
 
     Result = __vmx_on(&CurrentBlock->VmsSupport);
@@ -300,6 +301,8 @@ __vmx_entry(
 
         return STATUS_UNSUCCESSFUL;
     }
+
+    __ops_sgdt(&CurrentBlock->Registers.Gdtr.Limit);
 
     __vmx_prepare_segment(
         &CurrentBlock->Registers.Gdtr,
@@ -415,6 +418,8 @@ __vmx_entry(
     __vmx_vmwrite_common(HOST_GS_SELECTOR, SegmentDescriptor.Selector & ~RPL_MASK);
     __vmx_vmwrite_common(HOST_GS_BASE, SegmentDescriptor.Base);
 
+    __ops_sldt(&CurrentBlock->Registers.Ldtr);
+
     __vmx_prepare_segment(
         &CurrentBlock->Registers.Gdtr,
         CurrentBlock->Registers.Ldtr,
@@ -431,6 +436,8 @@ __vmx_entry(
     __vmx_vmwrite_common(GUEST_LDTR_BASE, SegmentDescriptor.Base);
     __vmx_vmwrite_common(GUEST_LDTR_LIMIT, SegmentDescriptor.Limit);
     __vmx_vmwrite_common(GUEST_LDTR_AR, SegmentDescriptor.AccessRights);
+
+    __ops_str(&CurrentBlock->Registers.Tr);
 
     __vmx_prepare_segment(
         &CurrentBlock->Registers.Gdtr,
@@ -460,6 +467,8 @@ __vmx_entry(
     __vmx_vmwrite_common(GUEST_GDTR_BASE, (ULONG64)CurrentBlock->Registers.Gdtr.Base);
     __vmx_vmwrite_common(HOST_GDTR_BASE, (ULONG64)CurrentBlock->Registers.Gdtr.Base);
 
+    __ops_sidt(&CurrentBlock->Registers.Idtr.Limit);
+
     DbgPrint(
         "[Sefirot] [Daat] idtr < %04x | %p >\n",
         CurrentBlock->Registers.Idtr.Limit,
@@ -469,9 +478,13 @@ __vmx_entry(
     __vmx_vmwrite_common(GUEST_IDTR_BASE, (ULONG64)CurrentBlock->Registers.Idtr.Base);
     __vmx_vmwrite_common(HOST_IDTR_BASE, (ULONG64)CurrentBlock->Registers.Idtr.Base);
 
+    Registers->Cr3 = __ops_readcr(3);
+
     __vmx_vmwrite_common(GUEST_CR0, CurrentBlock->VmxInfo.Cr0.QuadPart);
     __vmx_vmwrite_common(GUEST_CR3, CurrentBlock->Registers.Cr3);
     __vmx_vmwrite_common(GUEST_CR4, CurrentBlock->VmxInfo.Cr4.QuadPart);
+
+    CurrentBlock->Registers.Dr7 = __ops_readdr(7);
 
     __vmx_vmwrite_common(GUEST_DR7, CurrentBlock->Registers.Dr7);
     __vmx_vmwrite_common(GUEST_RFLAGS, CurrentBlock->Registers.EFlags);
@@ -505,7 +518,39 @@ __vmx_entry(
     __vmx_vmwrite_common(VMX_CR4_MASK, CurrentBlock->VmxInfo.Cr4Mask.QuadPart);
     __vmx_vmwrite_common(VMX_CR4_READ_SHADOW, CurrentBlock->VmxInfo.Cr4ReadShadow.QuadPart);
 
+    // read 0x00000000 - 0x00001FFF 0 ~ 1023
+    // read 0xC0000000 - 0xC0001FFF 1024 ~ 2047
+#define SetReadBitmap(map, bit) \
+            *((PCHAR)(map) + \
+                (((bit) & 0xC0000000) ? 0x400 : 0) + \
+                    (((bit) & 0x1FFF) >> 3)) |= 1 << ((bit) & 7);
+
+    // write 0x00000000 - 0x00001FFF 2048 ~ 3071
+    // write 0xC0000000 - 0xC0001FFF 3072 ~ 4095
+#define SetWriteBitmap(map, bit) \
+            *((PCHAR)(map) + \
+                (((bit) & 0xC0000000) ? 0xc00 : 0x800) + \
+                    (((bit) & 0x1FFF) >> 3)) |= 1 << ((bit) & 7);
+
+#define SetBitmap(map, bit) { \
+            SetReadBitmap(map, bit); \
+            SetWriteBitmap(map, bit); \
+            }
+
+    SetBitmap(CurrentBlock->Region.Bitmap, IA32_SYSENTER_CS);
+    SetBitmap(CurrentBlock->Region.Bitmap, IA32_SYSENTER_ESP);
+    SetBitmap(CurrentBlock->Region.Bitmap, IA32_SYSENTER_EIP);
+    SetBitmap(CurrentBlock->Region.Bitmap, IA32_FS_BASE);
+    SetBitmap(CurrentBlock->Region.Bitmap, IA32_GS_BASE);
+
     __vmx_vmwrite_common(VMX_MSR_BITMAP, CurrentBlock->Bitmap.QuadPart);
+
+    CurrentBlock->ExceptionBitmap.LowPart |= 1UL << VECTOR_NMI;
+    CurrentBlock->ExceptionBitmap.LowPart |= 1UL << VECTOR_DB;
+    CurrentBlock->ExceptionBitmap.LowPart |= 1UL << VECTOR_BP;
+
+    __vmx_vmwrite_common(VMX_EXCEPTION_BITMAP, CurrentBlock->ExceptionBitmap.QuadPart);
+    
     __vmx_vmwrite_common(VMX_TSC_OFFSET, 0);
 
     if (CurrentBlock->VmxInfo.BaseInfo & (1ULL << 55)) {
@@ -534,42 +579,46 @@ __vmx_entry(
     }
 
     DbgPrint(
-        "[Sefirot] [Daat] pin fixed control < %p >\n",
-        CurrentBlock->VmxInfo.PinFixed.QuadPart);
+        "[Sefirot] [Daat] pin fixed control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.PinFixed.HighPart,
+        CurrentBlock->VmxInfo.PinFixed.LowPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] primary fixed control < %p >\n",
-        CurrentBlock->VmxInfo.PrimaryFixed.QuadPart);
+        "[Sefirot] [Daat] primary fixed control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.PrimaryFixed.HighPart,
+        CurrentBlock->VmxInfo.PrimaryFixed.LowPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] exit fixed control < %p >\n",
-        CurrentBlock->VmxInfo.ExitFixed.QuadPart);
+        "[Sefirot] [Daat] exit fixed control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.ExitFixed.HighPart,
+        CurrentBlock->VmxInfo.ExitFixed.LowPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] entry fixed control < %p >\n",
-        CurrentBlock->VmxInfo.EntryFixed.QuadPart);
+        "[Sefirot] [Daat] entry fixed control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.EntryFixed.HighPart,
+        CurrentBlock->VmxInfo.EntryFixed.LowPart);
 
     if (SECONDARY_CONTROLS ==
         (CurrentBlock->VmxInfo.PrimaryFixed.HighPart & SECONDARY_CONTROLS)) {
         CurrentBlock->VmxInfo.SecondaryFixed.QuadPart = __ops_readmsr(IA32_VMX_SECONDARY_CTLS);
 
         DbgPrint(
-            "[Sefirot] [Daat] secondary fixed control < %p >\n",
-            CurrentBlock->VmxInfo.SecondaryFixed.QuadPart);
+            "[Sefirot] [Daat] secondary fixed control < %08x | %08x >\n",
+            CurrentBlock->VmxInfo.SecondaryFixed.HighPart,
+            CurrentBlock->VmxInfo.SecondaryFixed.LowPart);
     }
 
-    CurrentBlock->VmxInfo.Pin.LowPart |= 0;
     CurrentBlock->VmxInfo.Pin.LowPart &= CurrentBlock->VmxInfo.PinFixed.HighPart;
     CurrentBlock->VmxInfo.Pin.LowPart |= CurrentBlock->VmxInfo.PinFixed.LowPart;
 
     __vmx_vmwrite_common(VMX_PIN_CONTROLS, CurrentBlock->VmxInfo.Pin.QuadPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] pin control < %p >\n",
-        CurrentBlock->VmxInfo.Pin.QuadPart);
+        "[Sefirot] [Daat] pin control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.Pin.HighPart,
+        CurrentBlock->VmxInfo.Pin.LowPart);
 
     if (0 != X86_FEATURE_RDTSCP(&CurrentBlock->Feature)) {
-        // TODO: Check VMX capabilities to ensure ENABLE_RDTSCP is available
         CurrentBlock->VmxInfo.Secondary.LowPart |= ENABLE_RDTSCP;
     }
 
@@ -579,14 +628,11 @@ __vmx_entry(
     __vmx_vmwrite_common(VMX_SECONDARY_PROCESSOR_CONTROLS, CurrentBlock->VmxInfo.Secondary.QuadPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] secondary control  < %p >\n",
-        CurrentBlock->VmxInfo.Secondary.QuadPart);
+        "[Sefirot] [Daat] secondary control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.Secondary.HighPart,
+        CurrentBlock->VmxInfo.Secondary.LowPart);
 
-#ifndef _WIN64
-#else
     CurrentBlock->VmxInfo.Primary.LowPart |= DR_EXITING;
-#endif // !_WIN64
-
     CurrentBlock->VmxInfo.Primary.LowPart |= MSR_BITMAP_ACTIVE;
     CurrentBlock->VmxInfo.Primary.LowPart |= SECONDARY_CONTROLS;
 
@@ -596,52 +642,41 @@ __vmx_entry(
     __vmx_vmwrite_common(VMX_PRIMARY_PROCESSOR_CONTROLS, CurrentBlock->VmxInfo.Primary.QuadPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] primary control < %p >\n",
-        CurrentBlock->VmxInfo.Primary.QuadPart);
+        "[Sefirot] [Daat] primary control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.Primary.HighPart,
+        CurrentBlock->VmxInfo.Primary.LowPart);
 
-#ifndef _WIN64
-    CurrentBlock->VmxInfo.Exit.LowPart |= 0;
-    CurrentBlock->VmxInfo.Exit.LowPart &= CurrentBlock->VmxInfo.ExitFixed.HighPart;
-    CurrentBlock->VmxInfo.Exit.LowPart |= CurrentBlock->VmxInfo.ExitFixed.LowPart;
+    CurrentBlock->VmxInfo.Exit.LowPart |= ENTRY_CONTROL_LOAD_DEBUG_CONTROLS;
 
-    __vmx_vmwrite_common(VMX_EXIT_CONTROLS, CurrentBlock->VmxInfo.Exit.QuadPart);
-
-    DbgPrint(
-        "[Sefirot] [Daat] exit control < %p >\n",
-        CurrentBlock->VmxInfo.Exit.QuadPart);
-
-    CurrentBlock->VmxInfo.Entry.LowPart |= 0;
-    CurrentBlock->VmxInfo.Entry.LowPart &= CurrentBlock->VmxInfo.EntryFixed.HighPart;
-    CurrentBlock->VmxInfo.Entry.LowPart |= CurrentBlock->VmxInfo.EntryFixed.LowPart;
-
-    __vmx_vmwrite_common(VMX_ENTRY_CONTROLS, CurrentBlock->VmxInfo.Entry.QuadPart);
-
-    DbgPrint(
-        "[Sefirot] [Daat] entry control < %p >\n",
-        CurrentBlock->VmxInfo.Entry.QuadPart);
-#else
+#ifdef _WIN64
     CurrentBlock->VmxInfo.Exit.LowPart |= EXIT_CONTROL_HOST_ADDR_SPACE_SIZE;
+#endif // _WIN64
+
     CurrentBlock->VmxInfo.Exit.LowPart &= CurrentBlock->VmxInfo.ExitFixed.HighPart;
     CurrentBlock->VmxInfo.Exit.LowPart |= CurrentBlock->VmxInfo.ExitFixed.LowPart;
 
     __vmx_vmwrite_common(VMX_EXIT_CONTROLS, CurrentBlock->VmxInfo.Exit.QuadPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] exit control < %p >\n",
-        CurrentBlock->VmxInfo.Exit.QuadPart);
+        "[Sefirot] [Daat] exit control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.Exit.HighPart,
+        CurrentBlock->VmxInfo.Exit.LowPart);
 
+    CurrentBlock->VmxInfo.Entry.LowPart |= EXIT_CONTROL_SAVE_DEBUG_CONTROLS;
+
+#ifdef _WIN64
     CurrentBlock->VmxInfo.Entry.LowPart |= ENTRY_CONTROL_LONG_MODE_GUEST;
+#endif // _WIN64
+
     CurrentBlock->VmxInfo.Entry.LowPart &= CurrentBlock->VmxInfo.EntryFixed.HighPart;
     CurrentBlock->VmxInfo.Entry.LowPart |= CurrentBlock->VmxInfo.EntryFixed.LowPart;
 
     __vmx_vmwrite_common(VMX_ENTRY_CONTROLS, CurrentBlock->VmxInfo.Entry.QuadPart);
 
     DbgPrint(
-        "[Sefirot] [Daat] entry control < %p >\n",
-        CurrentBlock->VmxInfo.Entry.QuadPart);
-#endif // !_WIN64
-
-    // __debugbreak();
+        "[Sefirot] [Daat] entry control < %08x | %08x >\n",
+        CurrentBlock->VmxInfo.Entry.HighPart,
+        CurrentBlock->VmxInfo.Entry.LowPart);
 
     Result = __vmx_vmlaunch();
 

@@ -84,6 +84,70 @@ REGISTERS_FRAME_LENGTH EQU 00080h
 
 ; ULONG
 ;     NTAPI
+;     __ops_sldt(
+;         __in PUSHORT Selector
+;     );
+
+    cPublicProc ___ops_sldt, 1
+    
+        mov ecx, [esp + 4]
+        
+        sldt word ptr [ecx]
+        
+        stdRET ___ops_sldt
+
+    stdENDP ___ops_sldt
+    
+; ULONG
+;     NTAPI
+;     __ops_str(
+;         __in PUSHORT Selector
+;     );
+
+    cPublicProc ___ops_str, 1
+    
+        mov ecx, [esp + 4]
+        
+        str word ptr [ecx]
+        
+        stdRET ___ops_str
+
+    stdENDP ___ops_str
+    
+; ULONG
+;     NTAPI
+;     __ops_sgdt(
+;         __in PUSHORT Limit
+;     );
+
+    cPublicProc ___ops_sgdt, 1
+    
+        mov ecx, [esp + 4]
+        
+        sgdt fword ptr [ecx] ; &Descriptor->Limit
+        
+        stdRET ___ops_sgdt
+
+    stdENDP ___ops_sgdt
+    
+; ULONG
+;     NTAPI
+;     __ops_sidt(
+;         __in PUSHORT Limit
+;     );
+
+    cPublicProc ___ops_sidt, 1
+    
+        mov ecx, [esp + 4]
+        
+        sidt fword ptr [ecx] ; &Descriptor->Limit
+        
+        stdRET ___ops_sidt
+
+    stdENDP ___ops_sidt
+    
+; ULONG
+;     NTAPI
 ;     __ops_segment_limit(
 ;         __in ULONG Selector
 ;     );
@@ -158,50 +222,217 @@ REGISTERS_FRAME_LENGTH EQU 00080h
 
     stdENDP ___ops_writemsr
     
+; SIZE_T
+;     NTAPI
+;     __ops_readcr(
+;         __in ULONG Register
+;     );
+
+    cPublicProc ___ops_readcr, 1
+    
+        mov ecx, [esp + 4]
+        
+        test ecx, ecx
+        jnz @f
+
+        mov eax, cr0
+
+        jmp __ops_readcr_ret
+        
+@@ :
+        cmp ecx, 2
+        jnz @f
+        
+        mov eax, cr2
+
+        jmp __ops_readcr_ret
+        
+@@ :
+        cmp ecx, 3
+        jnz @f
+        
+        mov eax, cr3
+
+        jmp __ops_readcr_ret
+        
+@@ :
+        cmp ecx, 4
+        jnz __ops_readcr_ret
+        
+        mov eax, cr4
+
+__ops_readcr_ret :
+        stdRET ___ops_readcr
+
+    stdENDP ___ops_readcr
+    
 ; VOID
 ;     NTAPI
-;     __ops_writecr0(
+;     __ops_writecr(
+;         __in ULONG Register,
 ;         __in SIZE_T Value
 ;     );
 
-    cPublicProc ___ops_writecr0, 1
+    cPublicProc ___ops_writecr, 2
     
-        mov eax, [esp + 4]
-        mov cr0, eax
+        mov ecx, [esp + 4]
+        mov edx, [esp + 8]
         
-        stdRET ___ops_writecr0
+        test ecx, ecx
+        jnz @f
 
-    stdENDP ___ops_writecr0
+        mov cr0, edx
+
+        jmp __ops_writecr_ret
+        
+@@ :
+        cmp ecx, 2
+        jnz @f
+
+        mov cr2, edx
+
+        jmp __ops_writecr_ret
+        
+@@ :
+        cmp ecx, 3
+        jnz @f
+
+        mov cr3, edx
+
+        jmp __ops_writecr_ret
+        
+@@ :
+        cmp ecx, 4
+        jnz __ops_writecr_ret
+
+        mov cr4, edx
+
+__ops_writecr_ret :
+        stdRET ___ops_writecr
+
+    stdENDP ___ops_writecr
+    
+; SIZE_T
+;     NTAPI
+;     __ops_readdr(
+;         __in ULONG Register
+;     );
+
+    cPublicProc ___ops_readdr, 1
+    
+        mov ecx, [esp + 4]
+        
+        test ecx, ecx
+        jnz @f
+
+        mov eax, dr0
+
+        jmp __ops_readdr_ret
+
+@@ :
+        cmp ecx, 1
+        jnz @f
+        
+        mov eax, dr1
+
+        jmp __ops_readdr_ret
+        
+@@ :
+        cmp ecx, 2
+        jnz @f
+        
+        mov eax, dr2
+
+        jmp __ops_readdr_ret
+        
+@@ :
+        cmp ecx, 3
+        jnz @f
+        
+        mov eax, dr3
+
+        jmp __ops_readdr_ret
+        
+@@ :
+        cmp ecx, 6
+        jnz @f
+        
+        mov eax, dr6
+
+        jmp __ops_readdr_ret
+        
+@@ :
+        cmp ecx, 7
+        jnz __ops_readdr_ret
+        
+        mov eax, dr7
+        
+__ops_readdr_ret :
+        stdRET ___ops_readdr
+
+    stdENDP ___ops_readdr
     
 ; VOID
 ;     NTAPI
-;     __ops_writecr3(
+;     __ops_writedr(
+;         __in ULONG Register,
 ;         __in SIZE_T Value
 ;     );
 
-    cPublicProc ___ops_writecr3, 1
+    cPublicProc ___ops_writedr, 2
     
-        mov eax, [esp + 4]
-        mov cr3, eax
+        mov ecx, [esp + 4]
+        mov edx, [esp + 8]
         
-        stdRET ___ops_writecr3
+        test ecx, ecx
+        jnz @f
 
-    stdENDP ___ops_writecr3
-    
-; VOID
-;     NTAPI
-;     __ops_writecr4(
-;         __in SIZE_T Value
-;     );
+        mov dr0, edx
 
-    cPublicProc ___ops_writecr4, 1
-    
-        mov eax, [esp + 4]
-        mov cr4, eax
+        jmp __ops_writedr_ret
+
+@@ :
+        cmp ecx, 1
+        jnz @f
+
+        mov dr1, edx
+
+        jmp __ops_writedr_ret
         
-        stdRET ___ops_writecr4
+@@ :
+        cmp ecx, 2
+        jnz @f
 
-    stdENDP ___ops_writecr4
+        mov dr2, edx
+
+        jmp __ops_writedr_ret
+        
+@@ :
+        cmp ecx, 3
+        jnz @f
+
+        mov dr3, edx
+
+        jmp __ops_writedr_ret
+        
+@@ :
+        cmp ecx, 6
+        jnz @f
+
+        mov dr6, edx
+
+        jmp __ops_writedr_ret
+        
+@@ :
+        cmp ecx, 7
+        jnz __ops_writedr_ret
+
+        mov dr7, edx
+        
+__ops_writedr_ret :
+        stdRET ___ops_writedr
+
+    stdENDP ___ops_writedr
     
 ; VMX_RESULT
 ;     NTAPI
@@ -426,7 +657,7 @@ REGISTERS_FRAME_LENGTH EQU 00080h
     cPublicProc ___vmx_vmentry
     
         mov [esp].RfEax, eax
-        mov [esp].RfEax, ecx
+        mov [esp].RfEcx, ecx
         mov [esp].RfEdx, edx
         mov [esp].RfEbx, ebx
         mov [esp].RfEsp, esp
@@ -463,6 +694,7 @@ REGISTERS_FRAME_LENGTH EQU 00080h
         push ebx
         push esi
         push edi
+        push ebp
         
         mov ecx, [ebp + 8]
 
@@ -478,6 +710,7 @@ REGISTERS_FRAME_LENGTH EQU 00080h
         mov eax, -1
 
 resume :
+        pop ebp
         pop edi
         pop esi
         pop ebx
@@ -671,7 +904,14 @@ resume :
         mov ecx, [esp + 8]
         
         pop [ecx].RfEcx
-
+        
+        mov RfSegEs [ecx], es
+        mov RfSegCs [ecx], cs
+        mov RfSegSs [ecx], ss
+        mov RfSegDs [ecx], ds
+        mov RfSegFs [ecx], fs
+        mov RfSegGs [ecx], gs
+        
         mov [ecx].RfEax, eax
         mov [ecx].RfEdx, edx
         mov [ecx].RfEbx, ebx
@@ -721,110 +961,6 @@ resume :
         stdRET _RestoreRegisters
 
     stdENDP _RestoreRegisters
-    
-; VOID
-;     NTAPI
-;     CaptureSegmentRegisters(
-;         __out PREGISTERS_FRAME Registers
-;     );
-
-    cPublicProc _CaptureSegmentRegisters, 1
-    
-        mov ecx, [esp + 4]
-        
-        mov RfSegEs [ecx], es
-        mov RfSegCs [ecx], cs
-        mov RfSegSs [ecx], ss
-        mov RfSegDs [ecx], ds
-        mov RfSegFs [ecx], fs
-        mov RfSegGs [ecx], gs
-        
-        sldt word ptr RfLdtr [ecx]
-        str word ptr RfTr [ecx]
-        
-        sgdt fword ptr RfGdtr [ecx]
-        sidt fword ptr RfIdtr [ecx]
-        
-        stdRET _CaptureSegmentRegisters
-
-    stdENDP _CaptureSegmentRegisters
-    
-; VOID
-;     NTAPI
-;     CaptureControlRegisters(
-;         __out PREGISTERS_FRAME Registers
-;     );
-
-    cPublicProc _CaptureControlRegisters, 1
-    
-        mov ecx, [esp + 4]
-        
-        mov eax, cr0
-        mov RfCr0 [ecx], eax
-        mov eax, cr2
-        mov RfCr2 [ecx], eax
-        mov eax, cr3
-        mov RfCr3 [ecx], eax
-        mov eax, cr4
-        mov RfCr4 [ecx], eax
-        
-        stdRET _CaptureControlRegisters
-
-    stdENDP _CaptureControlRegisters
-    
-; VOID
-;     NTAPI
-;     CaptureDebugRegisters(
-;         __out PREGISTERS_FRAME Registers
-;     );
-
-    cPublicProc _CaptureDebugRegisters, 1
-    
-        mov ecx, [esp + 4]
-        
-        mov eax, dr0
-        mov RfDr0 [ecx], eax
-        mov eax, dr1
-        mov RfDr1 [ecx], eax
-        mov eax, dr2
-        mov RfDr2 [ecx], eax
-        mov eax, dr3
-        mov RfDr3 [ecx], eax
-        mov eax, dr6
-        mov RfDr6 [ecx], eax
-        mov eax, dr7
-        mov RfDr7 [ecx], eax
-        
-        stdRET _CaptureDebugRegisters
-
-    stdENDP _CaptureDebugRegisters
-    
-; VOID
-;     NTAPI
-;     RestoreDebugRegisters(
-;         __out PREGISTERS_FRAME Registers
-;     );
-
-    cPublicProc _RestoreDebugRegisters, 1
-    
-        mov ecx, [esp + 4]
-        
-        mov eax, RfDr0 [ecx]
-        mov dr0, eax
-        mov eax, RfDr1 [ecx]
-        mov dr1, eax
-        mov eax, RfDr2 [ecx]
-        mov dr2, eax
-        mov eax, RfDr3 [ecx]
-        mov dr3, eax
-        mov eax, RfDr6 [ecx]
-        mov dr6, eax
-        mov eax, RfDr7 [ecx]
-        mov dr7, eax
-        
-        stdRET _RestoreDebugRegisters
-
-    stdENDP _RestoreDebugRegisters
     
 _TEXT$00    ends
 
